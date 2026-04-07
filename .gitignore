@@ -1,0 +1,4 @@
+bin/tailwindcss
+bin/app
+tmp/
+.env
