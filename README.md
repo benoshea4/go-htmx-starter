@@ -12,6 +12,7 @@ A minimal, self-hosted Go web app starter. Go backend, HTMX frontend, Postgres s
 | PostgreSQL + pgx | Database |
 | sqlc | Type-safe SQL → Go codegen |
 | Goose | Migrations (auto-run on startup) |
+| Resend | Transactional email (stdout fallback in dev) |
 
 ## Why this stack
 
@@ -57,54 +58,36 @@ The HA deploy targets Hetzner CX23 nodes (~€4/month each). For a self-hosted a
 
 ## Quick start
 
-### 1. Tailwind CSS binary
-
-The Tailwind standalone CLI is required to build CSS. It is not included in the repo — download it with:
+The only hard prerequisite is **Go** ([golang.org/dl](https://golang.org/dl)). Everything else is installed automatically.
 
 ```bash
-make tailwind-install
-```
-
-This downloads the correct binary for your OS/arch into `bin/tailwindcss` (gitignored).
-
-> **Alternative (no download):** If you'd prefer not to download the binary, you can switch to the Tailwind CDN play build. See the commented-out option in `web/templates/layout.html` and the `css` / `css-watch` / `dev` targets in the `Makefile`. The CDN build is not recommended for production.
-
-### 2. Environment
-
-```bash
-cp .env.example .env
-# Edit .env — DATABASE_URL is required; Ed25519 keys are auto-generated on first run
-```
-
-### 3. Run
-
-```bash
-make dev   # Tailwind watch + Air hot reload
+make setup   # installs Air, PostgreSQL, Tailwind; creates DB and .env
+make dev     # Tailwind watch + Air hot reload
+make seed    # create dev@example.com / devpassword
 ```
 
 App runs at `http://localhost:8080`.
 
-### Dev credentials
+`make setup` is safe to re-run — it skips anything already in place.
 
-```
-Email:    dev@example.com
-Password: devpassword
-```
+> **What `make setup` does:** installs Air (`go install`), installs PostgreSQL (Homebrew on macOS, apt on Ubuntu/Debian), starts the Postgres service, creates the `app` database, copies `.env.example` → `.env`, and downloads the Tailwind standalone binary.
 
-Run `make seed` to create/reset the dev user.
+> **Tailwind CDN alternative:** if you'd prefer not to download the binary, see the commented-out CDN option in `web/templates/layout.html`. Not recommended for production.
 
 ## Commands
 
 ```bash
+make setup           # first-time setup: Air, PostgreSQL, Tailwind, DB, .env
 make dev             # Tailwind watch + Air hot reload (Ctrl+C stops both)
 make run             # go run ./cmd/api (no Tailwind watch)
-make build           # build CSS then go build
+make build           # build CSS then go build (native)
+make build-linux     # cross-compile for linux/amd64 (used by make deploy)
 make seed            # create/reset dev user
-make generate        # sqlc generate (after editing sql/queries/)
+make generate        # sqlc generate (after editing internal/database/queries/)
 make migrate         # goose up
 make migrate-down    # roll back one step
 make migrate-status  # show current DB version
-make tailwind-install  # download Tailwind binary into bin/
+make tailwind-install  # (re)download Tailwind binary into bin/
 ```
 
 ## Adding a feature
@@ -131,3 +114,31 @@ make tailwind-install  # download Tailwind binary into bin/
 ## Deploy
 
 See `deploy/` for Hetzner + Cloudflare Tunnel + Patroni HA config.
+
+### Production environment variables
+
+In production, Ed25519 keys are **not** auto-generated — the app exits on startup if they are missing. Generate them once and set them as persistent server environment variables (not in `.env`):
+
+The easiest way to get production keys is to run `make dev` once in a dev environment — the app auto-generates keys and appends them to `.env`. Copy the `ED25519_PRIVATE_KEY` and `ED25519_PUBLIC_KEY` lines to your server's environment (not `.env` — use systemd `EnvironmentFile`, Docker secrets, or your hosting provider's env config). Rotating these keys logs out all users cluster-wide.
+
+### Static files
+
+The binary serves CSS and JS from the `web/static/` directory on disk — it is not self-contained. `make deploy` rsyncs `web/` to the server automatically. If you deploy manually or containerize the app, ensure `web/static/` is present alongside the binary.
+
+### `make deploy` is single-node
+
+`make deploy` deploys to the single host in `$(SERVER)`. For a multi-node Patroni cluster, use a rolling loop so Cloudflare routes around nodes being restarted:
+
+```bash
+make build-linux
+for NODE in root@10.0.0.2 root@10.0.0.3 root@10.0.0.4; do
+    rsync -av bin/app ${NODE}:/opt/app/
+    rsync -av --exclude='input.css' web/ ${NODE}:/opt/app/web/
+    ssh ${NODE} "systemctl restart app"
+    sleep 5
+done
+```
+
+### Health endpoint
+
+`GET /health` returns `200 OK` — use this for load balancer and uptime checks.

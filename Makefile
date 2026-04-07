@@ -1,4 +1,4 @@
-.PHONY: run build build-linux deploy migrate migrate-status migrate-down seed generate css css-watch dev tailwind-install
+.PHONY: run build build-linux deploy migrate migrate-status migrate-down seed generate css css-watch dev tailwind-install setup
 
 # Production server — override with: make deploy SERVER=root@yourserver.com
 SERVER ?= root@yourserver
@@ -18,6 +18,9 @@ bin/tailwindcss:
 	echo "Downloading Tailwind CSS $(TAILWIND_VERSION) ($$BINARY)..."; \
 	curl -sLo bin/tailwindcss https://github.com/tailwindlabs/tailwindcss/releases/download/$(TAILWIND_VERSION)/$$BINARY; \
 	chmod +x bin/tailwindcss
+
+setup:
+	@bash scripts/setup.sh
 
 tailwind-install:
 	@rm -f bin/tailwindcss
