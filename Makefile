@@ -32,12 +32,12 @@ css: bin/tailwindcss
 css-watch: bin/tailwindcss
 	./bin/tailwindcss -i web/input.css -o web/static/css/tailwind.css --watch
 
-dev: bin/tailwindcss
+dev: setup
 	@trap 'kill 0' INT TERM; \
 	./bin/tailwindcss -i web/input.css -o web/static/css/tailwind.css --watch & \
 	air
 
-run:
+run: setup
 	go run ./cmd/api
 
 build: css

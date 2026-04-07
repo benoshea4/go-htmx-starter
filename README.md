@@ -58,28 +58,25 @@ The HA deploy targets Hetzner CX23 nodes (~€4/month each). For a self-hosted a
 
 ## Quick start
 
-The only hard prerequisite is **Go** ([golang.org/dl](https://golang.org/dl)). Everything else is installed automatically.
+The only hard prerequisite is **Go** ([golang.org/dl](https://golang.org/dl)).
 
 ```bash
-make setup   # installs Air, PostgreSQL, Tailwind; creates DB and .env
-make dev     # Tailwind watch + Air hot reload
+make dev     # installs tools, creates DB + .env, starts Tailwind watch + Air
 make seed    # create dev@example.com / devpassword
 ```
 
 App runs at `http://localhost:8080`.
 
-`make setup` is safe to re-run — it skips anything already in place.
-
-> **What `make setup` does:** installs Air (`go install`), installs PostgreSQL (Homebrew on macOS, apt on Ubuntu/Debian), starts the Postgres service, creates the `app` database, copies `.env.example` → `.env`, and downloads the Tailwind standalone binary.
+`make dev` and `make run` handle all prerequisites automatically — Air, PostgreSQL, Tailwind binary, database, and `.env`. Re-running is safe; anything already present is skipped.
 
 > **Tailwind CDN alternative:** if you'd prefer not to download the binary, see the commented-out CDN option in `web/templates/layout.html`. Not recommended for production.
 
 ## Commands
 
 ```bash
-make setup           # first-time setup: Air, PostgreSQL, Tailwind, DB, .env
-make dev             # Tailwind watch + Air hot reload (Ctrl+C stops both)
-make run             # go run ./cmd/api (no Tailwind watch)
+make dev             # install tools + create DB/env if needed, then Tailwind watch + Air
+make run             # install tools + create DB/env if needed, then go run ./cmd/api
+make setup           # same prerequisite checks as dev/run, standalone
 make build           # build CSS then go build (native)
 make build-linux     # cross-compile for linux/amd64 (used by make deploy)
 make seed            # create/reset dev user

@@ -100,7 +100,11 @@ if [ -f .env ]; then
     ok ".env already exists — skipping"
 else
     cp .env.example .env
-    ok ".env created from .env.example — edit DATABASE_URL if needed"
+    # Replace the placeholder credentials with the current OS user (no password —
+    # the default for Homebrew on macOS and most local Postgres installs).
+    CURRENT_USER=$(whoami)
+    sed "s|postgres://user:password@localhost:5432/app|postgres://${CURRENT_USER}@localhost:5432/app|" .env > .env.tmp && mv .env.tmp .env
+    ok ".env created — DATABASE_URL set to postgres://${CURRENT_USER}@localhost:5432/app"
 fi
 
 # ── 7. Tailwind CSS binary ────────────────────────────────────────────────────
