@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@layer base {
+  *, *::before, *::after {
+    border-color: var(--color-gray-200);
+  }
+}
+
+@layer utilities {
+  .htmx-indicator { display: none; transition: opacity 200ms ease-in; }
+  .htmx-request .htmx-indicator,
+  .htmx-request.htmx-indicator { display: inline-block; }
+}

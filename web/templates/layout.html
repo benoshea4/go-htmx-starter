@@ -1,0 +1,37 @@
+{{ define "base" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App</title>
+    <script src="/static/js/htmx.min.js"></script>
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+</head>
+<body class="bg-gray-100 p-8" hx-boost="true">
+    <div class="max-w-4xl mx-auto">
+        {{ template "navbar" . }}
+        
+        <main id="slot">
+            {{ template "content" . }}
+        </main>
+    </div>
+</body>
+</html>
+{{ end }}
+
+{{ define "navbar" }}
+<header class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold cursor-pointer" hx-get="/" hx-target="#slot" hx-push-url="true">App</h1>
+    <div class="flex items-center gap-4">
+        {{ if .Authenticated }}
+            <span class="text-sm text-gray-500">{{ .Email }}</span>
+            <a href="/settings" class="text-sm text-gray-500 hover:text-gray-700">Sessions</a>
+            <button hx-post="/logout" class="text-sm text-red-500 hover:text-red-700">Logout</button>
+        {{ else }}
+            <a href="/login" class="text-sm text-blue-600 hover:underline">Login</a>
+            <a href="/signup" class="text-sm text-gray-600 hover:underline">Sign up</a>
+        {{ end }}
+    </div>
+</header>
+{{ end }}

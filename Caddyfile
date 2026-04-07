@@ -1,0 +1,29 @@
+# Caddy runs as a local reverse proxy only — TLS is handled end-to-end by Cloudflare Tunnel.
+# cloudflared connects to localhost:8081; Caddy forwards to the Go app on localhost:8080.
+# No domain block, no auto-HTTPS. This server has zero open internet-facing ports.
+:8081 {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Content-Security-Policy "default-src 'self'; form-action 'self'; frame-ancestors 'none';"
+        -Server
+    }
+
+    # Redact reset tokens from access logs. Requires Caddy 2.7+.
+    # Verify with: journalctl -u caddy | grep reset-password
+    log {
+        format filter {
+            fields {
+                request>uri regexp `^/reset-password\?.*` /reset-password?[redacted]
+            }
+        }
+    }
+
+    reverse_proxy localhost:8080 {
+        # CF-Connecting-IP is injected by Cloudflare at the edge and forwarded through
+        # the tunnel. Safe to trust because zero external ports are open — the only
+        # path to this server is through the authenticated Cloudflare Tunnel.
+        header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+    }
+}

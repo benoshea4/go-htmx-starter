@@ -1,0 +1,37 @@
+{{ define "content" }}
+    <div class="bg-white rounded-lg shadow-sm p-8 w-full max-w-sm">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">Create account</h1>
+
+        <div id="error" class="text-red-600 text-sm mb-4 empty:hidden bg-red-50 p-3 rounded border border-red-200"></div>
+
+        <form hx-post="/signup"
+              hx-target="#error"
+              hx-swap="innerHTML"
+              class="flex flex-col gap-4">
+
+            <input type="email"
+                   name="email"
+                   required
+                   maxlength="254"
+                   placeholder="Email"
+                   class="border p-2 rounded focus:outline-hidden focus:ring-2 focus:ring-blue-400">
+
+            <input type="password"
+                   name="password"
+                   required
+                   minlength="8"
+                   maxlength="128"
+                   placeholder="Password (min 8 characters)"
+                   class="border p-2 rounded focus:outline-hidden focus:ring-2 focus:ring-blue-400">
+
+            <button type="submit"
+                    class="bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">
+                Create account
+            </button>
+        </form>
+
+        <p class="mt-4 text-sm text-gray-500">
+            Already have an account? <a href="/login" class="hover:text-blue-600">Sign in</a>
+        </p>
+    </div>
+{{ end }}

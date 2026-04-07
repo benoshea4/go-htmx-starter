@@ -1,0 +1,193 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+**go-htmx-starter** — a minimal, self-hosted Go web app starter. Go backend, HTMX frontend, Postgres storage. Full auth built-in; add your own domain logic on top.
+
+---
+
+## Engineering Principles
+
+- **Simple and scaleable over clever.** Solve the problem with the least moving parts.
+- **DRY but not prematurely abstracted.** Don't abstract until there are at least three real cases.
+- **Stack-first thinking.** Before adding a new dependency, language, or tool — check whether Go templates, HTMX, or Postgres can already do it cleanly. Only reach outside the stack if the current tools genuinely cannot do the job without becoming messy.
+- **No JS unless unavoidable.** HTMX + server-side rendering handles most UI needs. If you think you need JS, check if an OOB swap, a fragment render, or a Postgres query solves it first.
+- **No new dependencies without justification.** Every dependency is a future maintenance burden. Use the stdlib and existing packages first.
+
+---
+
+## Stack & Versions
+
+| Tool | Version | Role |
+|------|---------|------|
+| Go | 1.25.7 | Backend language |
+| Chi | v5.2.5 | HTTP router |
+| HTMX | 1.9.10 (CDN) | Frontend interactivity (no JS framework) |
+| Tailwind CSS | v4.2.1 (standalone CLI) | Styling |
+| pgx/v5 | v5.8.0 | Postgres driver + connection pool |
+| sqlc | (generated) | Type-safe SQL → Go codegen |
+| Goose | v3.26.0 | DB migrations |
+| Air | — | Hot reload (`air` in project root) |
+| godotenv | v1.5.1 | `.env` loader |
+| golang-jwt/jwt/v5 | v5.3.1 | JWT signing (Ed25519 / EdDSA) |
+| golang.org/x/crypto | v0.48.0 | Argon2id password hashing |
+| httprate | v0.15.0 | Per-IP rate limiting on auth routes |
+| PostgreSQL | 18 | Database |
+
+---
+
+## Commands
+
+```bash
+# Dev server — Tailwind watch + Air hot reload in one command (Ctrl+C stops both)
+make dev
+
+# Makefile shortcuts
+make run             # go run ./cmd/api (no Tailwind watch)
+make build           # builds CSS (minified) then go build -o bin/app ./cmd/api
+make deploy          # build-linux + rsync binary & web/ to server + restart (SERVER=root@host)
+make css             # one-shot Tailwind build (minified)
+make css-watch       # Tailwind watch only
+make seed            # create/reset dev user (idempotent)
+make generate        # sqlc generate
+make migrate         # goose up  (manual; app also auto-runs on startup)
+make migrate-status  # show current DB version
+make migrate-down    # roll back one step
+
+# First-time setup: download Tailwind standalone binary into bin/ (gitignored)
+make tailwind-install
+```
+
+### Dev login credentials
+```
+URL:      http://localhost:8080/login
+Email:    dev@example.com
+Password: devpassword
+```
+
+---
+
+## Architecture
+
+### Request lifecycle
+```
+HTTP request
+  → Chi router (cmd/api/main.go)
+  → auth.Middleware.Require (protected routes only)
+  → Handler
+  → render.Template / render.Fragment
+  → Go html/template → HTML response
+```
+
+### HTMX rendering pattern (`internal/render/render.go`)
+
+- **`render.Template(w, r, "page.html", data)`** — full page or HTMX content swap. Detects `HX-Request` header: renders `"base"` block for normal requests, `"content"` block for HTMX requests. Auth state (`Authenticated`, `Email`) is injected automatically.
+- **`render.Fragment(w, "page.html", "block-name", data)`** — renders a named template block for HTMX partial swaps.
+
+Templates define three blocks: `base` (never used directly in pages), `content` (page body), and named fragments.
+
+HTMX errors use `HX-Retarget: #error` + `HX-Reswap: innerHTML` + `422` — all forms have a `<div id="error">` target.
+
+HTMX redirects use `HX-Redirect` header (never `http.Redirect` inside HTMX handlers).
+
+### Auth (`internal/auth/`)
+Dual-token session system with no server-side session store:
+
+| Token | Type | Duration | Storage |
+|-------|------|----------|---------|
+| `access_token` | Ed25519-signed JWT (EdDSA) | 15 min | HttpOnly cookie |
+| `refresh_token` | 32-byte CSPRNG, SHA-256 hashed | 7 days | HttpOnly cookie (raw hex); DB stores hash only |
+
+**Security properties enforced:**
+- Algorithm pinned to `jwt.SigningMethodEdDSA` — blocks `alg:none` and algorithm-confusion attacks.
+- Passwords: Argon2id (64MB memory, 2 iterations, parallelism 4, 32-byte key).
+- Refresh token hash: SHA-256 hex. Raw token only ever travels in cookies/links, never stored.
+- Constant-time comparison on password verification.
+- All auth cookies: `HttpOnly`, `SameSite=Strict`, `Secure` in production.
+- Rate limiting: 5 req/min per IP on `/signup`, `/login`, `/forgot-password`, `/reset-password`.
+- Email enumeration prevented on login and forgot-password.
+- Password reset: token marked used → password updated → all refresh tokens revoked — all in one transaction.
+- XSS: Go `html/template` auto-escapes all output.
+- SQL injection: sqlc generates parameterised queries.
+
+### Database (`internal/database/`)
+Generated by sqlc — do not edit directly. To change queries:
+1. Edit `sql/queries/*.sql`
+2. Run `sqlc generate`
+
+Schema lives in `internal/migrations/schema/` as Goose migration files.
+
+### Adding a new feature
+
+1. Add a migration in `internal/migrations/schema/` (name: `YYYYMMDDHHMMSS_description.sql`)
+2. Add SQL queries to `internal/database/queries/`
+3. Run `make generate` to regenerate Go types
+4. Create a handler in `internal/<feature>/handler.go`
+5. Register routes in `cmd/api/main.go`
+6. Add templates in `web/templates/`
+
+---
+
+## Environment (`.env`)
+
+Copy `.env.example` to `.env` and fill in values. Ed25519 keys are auto-generated on first dev run.
+
+```
+DATABASE_URL=postgres://user:password@localhost:5432/app?sslmode=disable
+PORT=8080
+ENV=development
+RESEND_API_KEY=       # leave blank to print emails to stdout
+APP_URL=http://localhost:8080
+```
+
+---
+
+## Deploy (3-node HA — Hetzner + Cloudflare Tunnels)
+
+See the deploy/ directory for configuration files. The architecture uses:
+- 3x Hetzner CX23 nodes across different datacenters
+- Cloudflare Tunnel (zero open ports)
+- Patroni + etcd for HA PostgreSQL
+- HAProxy on each node routing to the Patroni primary
+- Caddy as a local reverse proxy for security headers
+
+### Re-deploying
+
+```bash
+make build-linux
+
+# Rolling deploy — CF routes around nodes being restarted
+for NODE in root@10.0.0.2 root@10.0.0.3 root@10.0.0.4; do
+    rsync -av bin/app ${NODE}:/opt/app/
+    rsync -av --exclude='input.css' web/ ${NODE}:/opt/app/web/
+    ssh ${NODE} "systemctl restart app"
+    sleep 5
+done
+```
+
+---
+
+## What's Built-In
+
+- [x] Full auth flow: signup, login, logout, forgot-password, reset-password
+- [x] Ed25519 JWT access tokens + hashed refresh tokens with silent rotation
+- [x] Argon2id password hashing with timing-safe comparison
+- [x] Per-IP rate limiting on all auth mutation routes
+- [x] HTMX-aware render layer (full page vs partial swap, auto auth state injection)
+- [x] Sessions UI — `/settings` lists active sessions with individual revoke buttons
+- [x] CSRF protection via `SameSite=Strict` + `RequireHXRequest` middleware
+- [x] Structured logging (`log/slog`) — JSON in production, text in dev
+- [x] Migrations embedded in binary via `go:embed` — auto-run on startup
+- [x] Tailwind v4 standalone CLI build pipeline
+- [x] Background cleanup goroutine for expired tokens
+- [x] Hot reload with Air
+
+## What's Not Built-In (add your own)
+
+- Your domain models and business logic
+- Email flows beyond password reset
+- File uploads
+- Background job queue
+- WebSocket / SSE

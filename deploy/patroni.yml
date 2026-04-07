@@ -1,0 +1,78 @@
+# Patroni configuration template — copy to /etc/patroni/patroni.yml on each node.
+# Lines marked "# CHANGE" differ per node. All other values are shared.
+#
+# Private IP assignments (example — verify yours with: hcloud server list):
+#   n1-node1 (FSN1): 10.0.0.2
+#   n1-node2 (NBG1): 10.0.0.3
+#   n1-node3 (HEL1): 10.0.0.4
+
+scope: app
+namespace: /service/
+name: n1-node1  # CHANGE: n1-node1 | n1-node2 | n1-node3
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: 10.0.0.2:8008  # CHANGE: this node's private IP
+
+etcd3:
+  hosts:
+    - 10.0.0.2:2379
+    - 10.0.0.3:2379
+    - 10.0.0.4:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    # Auto-failover is blocked if replica WAL is more than 1 MB behind primary.
+    # Prevents promoting a lagging replica and losing recent writes.
+    maximum_lag_on_failover: 1048576
+    # Async replication — writes return once committed locally on the primary.
+    # Replica streams WAL asynchronously. Faster writes; theoretical risk of
+    # losing the last few committed transactions if the primary dies hard before
+    # the replica receives them. Acceptable trade-off for a CRM at this scale.
+    synchronous_mode: false
+    postgresql:
+      use_pg_rewind: true   # allows a demoted primary to re-join without full re-clone
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_log_hints: "on"  # required for pg_rewind
+        max_wal_senders: 10
+        max_replication_slots: 10
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - host replication replicator 10.0.0.0/24 scram-sha-256
+    - host all all 127.0.0.1/32 scram-sha-256
+    - host all all 10.0.0.0/24 scram-sha-256
+
+postgresql:
+  # Bind to private IP only — no PostgreSQL exposure on the public interface.
+  # HAProxy on each node connects to the primary's private IP.
+  listen: 10.0.0.2:5432  # CHANGE: this node's private IP
+  connect_address: 10.0.0.2:5432  # CHANGE: this node's private IP
+  data_dir: /var/lib/postgresql/18/main
+  bin_dir: /usr/lib/postgresql/18/bin
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: replicator
+      password: CHANGE_ME_REPL_PASSWORD   # same on all nodes
+    superuser:
+      username: postgres
+      password: CHANGE_ME_PG_PASSWORD     # same on all nodes
+    rewind:
+      username: rewind_user
+      password: CHANGE_ME_REWIND_PASSWORD # same on all nodes
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

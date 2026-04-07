@@ -1,0 +1,19 @@
+[Unit]
+Description=Go HTMX app server
+After=network-online.target haproxy.service
+# Stop retrying after 3 failed starts in 60 s — makes a bad migration obvious
+# rather than looping. Check logs: journalctl -u app -n 50
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=app
+WorkingDirectory=/opt/app
+ExecStart=/opt/app/app
+EnvironmentFile=/etc/app.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

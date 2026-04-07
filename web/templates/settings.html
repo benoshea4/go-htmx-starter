@@ -1,0 +1,54 @@
+{{ define "content" }}
+<div class="bg-white rounded-lg shadow-xs border overflow-hidden">
+    <div class="px-6 py-4 border-b">
+        <h2 class="text-lg font-semibold text-gray-800">Active Sessions</h2>
+        <p class="text-sm text-gray-500 mt-1">These devices are currently signed in to your account.</p>
+    </div>
+
+    {{ if .Sessions }}
+    <table class="w-full text-left border-collapse">
+        <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <tr>
+                <th class="px-6 py-3">Device</th>
+                <th class="px-6 py-3">IP Address</th>
+                <th class="px-6 py-3">Signed In</th>
+                <th class="px-6 py-3">Expires</th>
+                <th class="px-6 py-3"></th>
+            </tr>
+        </thead>
+        <tbody hx-disable>
+            {{ range .Sessions }}
+                {{ template "session-row" . }}
+            {{ end }}
+        </tbody>
+    </table>
+    {{ else }}
+    <p class="px-6 py-8 text-center text-gray-400">No active sessions found.</p>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "session-row" }}
+<tr id="session-{{ .ID }}" class="border-b hover:bg-gray-50">
+    <td class="px-6 py-3 text-sm">
+        {{ if .UserAgent.Valid }}{{ .UserAgent.String }}{{ else }}Unknown device{{ end }}
+        {{ if .IsCurrent }}<span class="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">current</span>{{ end }}
+    </td>
+    <td class="px-6 py-3 text-sm text-gray-600">
+        {{ if .IpAddress.Valid }}{{ .IpAddress.String }}{{ else }}—{{ end }}
+    </td>
+    <td class="px-6 py-3 text-sm text-gray-400">{{ .CreatedAt.Time.Format "Jan 2, 2006 15:04" }}</td>
+    <td class="px-6 py-3 text-sm text-gray-400">{{ .ExpiresAt.Time.Format "Jan 2, 2006" }}</td>
+    <td class="px-6 py-3 text-right">
+        {{ if not .IsCurrent }}
+        <button hx-delete="/sessions/{{ .ID }}"
+                hx-target="#session-{{ .ID }}"
+                hx-swap="outerHTML"
+                hx-confirm="Revoke this session?"
+                class="text-red-400 hover:text-red-600 text-sm">
+            Revoke
+        </button>
+        {{ end }}
+    </td>
+</tr>
+{{ end }}
